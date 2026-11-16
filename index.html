@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Фізика 8 клас: Температура і рух молекул</title>
+    <!-- Tailwind CSS for modern responsive layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for crisp physics UI icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- MathJax for nice render of physical formulas -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        .canvas-container {
+            position: relative;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+        /* Thermometer mercury column transition */
+        .mercury-level {
+            transition: height 0.3s ease-out, background-color 0.3s ease;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+
+    <!-- Header Section -->
+    <header class="bg-slate-900 border-b border-slate-800 py-4 px-6 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-xl shadow-lg shadow-indigo-500/30">
+                    <i class="fa-solid fa-atom animate-spin-slow"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+                        Інтерактивна фізика • 8 клас
+                    </h1>
+                    <p class="text-xs text-slate-400">Температура — міра середньої кінетичної енергії частинок</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 bg-slate-800/80 p-1.5 rounded-lg border border-slate-700 text-sm">
+                <span class="px-3 py-1 font-medium text-slate-300">Агрегатний стан:</span>
+                <button id="btnStateGas" onclick="changeState('gas')" class="px-3 py-1 rounded-md text-xs font-semibold bg-indigo-600 text-white shadow transition-all">Газ</button>
+                <button id="btnStateLiquid" onclick="changeState('liquid')" class="px-3 py-1 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">Рідина</button>
+                <button id="btnStateSolid" onclick="changeState('solid')" class="px-3 py-1 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">Тверде тіло</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
+        
+        <!-- Left & Center Panel: Simulation Canvas & Direct Controls -->
+        <div class="lg:col-span-8 flex flex-col gap-4">
+            
+            <!-- Canvas Container -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 relative">
+                
+                <!-- Status bar above canvas -->
+                <div class="flex justify-between items-center text-xs font-medium text-slate-400 px-1">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>Контейнер з частинками ($N = <span id="particleCountText">50</span>$)</span>
+                    </div>
+                    <div class="flex gap-4">
+                        <label class="cursor-pointer flex items-center gap-1.5 hover:text-slate-200 transition">
+                            <input type="checkbox" id="chkVectors" onchange="toggleVectors(this.checked)" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0">
+                            <span>Вектори швидкості</span>
+                        </label>
+                        <label class="cursor-pointer flex items-center gap-1.5 hover:text-slate-200 transition">
+                            <input type="checkbox" id="chkTrails" onchange="toggleTrails(this.checked)" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0">
+                            <span>Траєкторії</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Simulation Canvas Wrapper -->
+                <div class="canvas-container bg-slate-950 border border-slate-800 rounded-xl overflow-hidden relative aspect-video flex items-center justify-center">
+                    <canvas id="simCanvas" class="w-full h-full block cursor-pointer"></canvas>
+                    
+                    <!-- Floating Indicator Overlay -->
+                    <div class="absolute top-3 right-3 bg-slate-900/90 backdrop-blur border border-slate-700/60 rounded-xl p-3 text-right shadow-xl">
+                        <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Сер. кінетична енергія $\langle E_k \rangle$</div>
+                        <div class="text-xl sm:text-2xl font-black text-amber-400 font-mono" id="avgEkDisplay">0.00 <span class="text-xs text-slate-300">умов. од.</span></div>
+                        <div class="text-xs text-slate-400 mt-1">Сер. швидкість: <span id="avgSpeedDisplay" class="font-bold text-cyan-400">0</span> м/с</div>
+                    </div>
+                </div>
+
+                <!-- Quick Control Toolbar Below Canvas -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+                    <button onclick="adjustTemp(-50)" class="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 font-semibold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition active:scale-95">
+                        <i class="fa-solid fa-snowflake"></i> Охолодити (-50K)
+                    </button>
+                    <button onclick="adjustTemp(50)" class="bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 font-semibold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition active:scale-95">
+                        <i class="fa-solid fa-fire"></i> Нагріти (+50K)
+                    </button>
+                    <button id="btnPause" onclick="togglePause()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition active:scale-95">
+                        <i class="fa-solid fa-pause" id="pauseIcon"></i> <span id="pauseText">Пауза</span>
+                    </button>
+                    <button onclick="resetSim()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition active:scale-95">
+                        <i class="fa-solid fa-rotate-left"></i> Скинути
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Kinetic Energy & Speed Distribution Histogram -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-column text-indigo-400"></i> Розподіл молекул за швидкостями (Розподіл Максвелла)
+                    </h3>
+                    <span class="text-xs text-slate-400">8 клас: частина молекул рухається швидше, частина — повільніше</span>
+                </div>
+                <div class="h-28 w-full bg-slate-950 border border-slate-800 rounded-xl p-2 relative flex items-end justify-between gap-1" id="histogramContainer">
+                    <!-- Dynamic histogram bars inserted via JS -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Panel: Thermometer, Temperature Sliders & Physics Rules -->
+        <div class="lg:col-span-4 flex flex-col gap-4">
+            
+            <!-- Temperature Control & Thermometer Box -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 flex flex-col gap-5">
+                <h2 class="text-lg font-bold text-slate-100 border-b border-slate-800 pb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-temperature-half text-rose-500"></i> Вимірник температури
+                </h2>
+
+                <div class="flex gap-6 items-center">
+                    <!-- Animated Visual Thermometer -->
+                    <div class="flex flex-col items-center gap-1">
+                        <div class="w-6 h-48 bg-slate-950 rounded-full border border-slate-700 p-1 relative flex flex-col justify-end overflow-hidden shadow-inner">
+                            <div id="thermoMercury" class="w-full rounded-full mercury-level bg-gradient-to-t from-blue-500 via-amber-500 to-rose-600" style="height: 35%;"></div>
+                        </div>
+                        <div class="w-8 h-8 rounded-full bg-rose-600 border-2 border-slate-800 shadow-md flex items-center justify-center -mt-2 z-10">
+                            <i class="fa-solid fa-fire-flame-curved text-white text-xs"></i>
+                        </div>
+                    </div>
+
+                    <!-- Readings & Slider -->
+                    <div class="flex-grow flex flex-col gap-4">
+                        <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl flex justify-around items-center">
+                            <div class="text-center">
+                                <div class="text-xs text-slate-400 font-medium">Шкала Кельвіна</div>
+                                <div class="text-2xl font-black text-slate-100 font-mono" id="kelvinDisplay">300 <span class="text-sm font-normal text-slate-400">K</span></div>
+                            </div>
+                            <div class="h-8 w-px bg-slate-800"></div>
+                            <div class="text-center">
+                                <div class="text-xs text-slate-400 font-medium">Шкала Цельсія</div>
+                                <div class="text-2xl font-black text-cyan-400 font-mono" id="celsiusDisplay">27 <span class="text-sm font-normal text-slate-400">°C</span></div>
+                            </div>
+                        </div>
+
+                        <!-- Temperature Slider -->
+                        <div class="flex flex-col gap-2">
+                            <div class="flex justify-between text-xs font-semibold text-slate-400">
+                                <span>50 K (-223°C)</span>
+                                <span class="text-slate-200">Регулятор Т</span>
+                                <span>800 K (527°C)</span>
+                            </div>
+                            <input type="range" id="tempSlider" min="50" max="800" value="300" step="5" 
+                                   oninput="updateTemperatureFromSlider(this.value)"
+                                   class="w-full h-3 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-indigo-500 border border-slate-800">
+                        </div>
+
+                        <!-- Particle Mass Control -->
+                        <div class="flex items-center justify-between bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 text-xs">
+                            <span class="text-slate-300 font-medium">Маса молекул ($m$):</span>
+                            <div class="flex gap-1">
+                                <button onclick="setParticleMass(1)" id="btnMassLight" class="px-2.5 py-1 rounded bg-indigo-600 text-white font-bold transition">Легкі (H₂)</button>
+                                <button onclick="setParticleMass(4)" id="btnMassHeavy" class="px-2.5 py-1 rounded bg-slate-800 text-slate-400 hover:text-white font-bold transition">Важкі (O₂)</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Physical Formula Card -->
+            <div class="bg-gradient-to-br from-indigo-950/40 via-slate-900 to-slate-900 border border-indigo-500/30 rounded-2xl p-4 flex flex-col gap-2 relative overflow-hidden">
+                <div class="absolute -right-6 -bottom-6 text-indigo-500/10 text-8xl font-black pointer-events-none">E=kT</div>
+                <h3 class="text-sm font-bold text-indigo-300 flex items-center gap-2">
+                    <i class="fa-solid fa-graduation-cap"></i> Фізичний висновок для 8 класу
+                </h3>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    <strong>Температура</strong> — це фізична величина, яка характеризує стан теплової рівноваги системи та <span class="text-amber-300 font-semibold">є мірою середньої кінетичної енергії</span> хаотичного руху її частинок:
+                </p>
+                <div class="bg-slate-950/80 p-2.5 rounded-lg border border-indigo-500/20 text-center font-mono text-indigo-200 text-sm my-1">
+                    $$E_k = \frac{m \cdot v^2}{2} \quad \implies \quad \langle E_k \rangle \sim T$$
+                </div>
+                <ul class="text-xs text-slate-400 list-disc list-inside space-y-1">
+                    <li>Вища $T$ $\rightarrow$ молекули рухаються <strong>швидше</strong>.</li>
+                    <li>Нижча $T$ $\rightarrow$ молекули рухаються <strong>повільніше</strong>.</li>
+                </ul>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Quiz & Self-Check Section for Students -->
+    <section class="max-w-7xl w-full mx-auto p-4 sm:p-6 pt-0">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 flex flex-col gap-4">
+            <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                <i class="fa-solid fa-circle-question text-emerald-400"></i> Перевір свої знання (Експрес-тест)
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="quizContainer">
+                <!-- Question 1 -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col justify-between gap-3">
+                    <div>
+                        <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Питання 1</span>
+                        <p class="text-sm text-slate-200 font-medium mt-1">Що станеться із середньою швидкістю молекул газу при нагріванні?</p>
+                    </div>
+                    <div class="flex flex-col gap-2 text-xs">
+                        <button onclick="checkAnswer(this, false)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-left border border-slate-800 transition">Зменшиться</button>
+                        <button onclick="checkAnswer(this, true)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-left border border-slate-800 transition">Збільшиться</button>
+                        <button onclick="checkAnswer(this, false)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-left border border-slate-800 transition">Не зміниться</button>
+                    </div>
+                </div>
+
+                <!-- Question 2 -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col justify-between gap-3">
+                    <div>
+                        <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Питання 2</span>
+                        <p class="text-sm text-slate-200 font-medium mt-1">За якої температури припиняється тепловий рух молекул?</p>
+                    </div>
+                    <div class="flex flex-col gap-2 text-xs">
+                        <button onclick="checkAnswer(this, false)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-left border border-slate-800 transition">0 °C</button>
+                        <button onclick="checkAnswer(this, true)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-left border border-slate-800 transition">0 K (Абсолютний нуль)</button>
+                        <button onclick="checkAnswer(this, false)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-left border border-slate-800 transition">100 °C</button>
+                    </div>
+                </div>
+
+                <!-- Question 3 -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col justify-between gap-3">
+                    <div>
+                        <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Питання 3</span>
+                        <p class="text-sm text-slate-200 font-medium mt-1">Якщо температура однакова, чи однаковий рух у легких і важких молекул?</p>
+                    </div>
+                    <div class="flex flex-col gap-2 text-xs">
+                        <button onclick="checkAnswer(this, true)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-left border border-slate-800 transition">Легші молекули рухаються швидше</button>
+                        <button onclick="checkAnswer(this, false)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-left border border-slate-800 transition">Важчі молекули рухаються швидше</button>
+                        <button onclick="checkAnswer(this, false)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-left border border-slate-800 transition">Швидкості однаковості завжди</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-slate-950 border-t border-slate-800 py-3 text-center text-xs text-slate-500">
+        <p>Наочний демонстраційний матеріал до уроку фізики в 8 класі • Фізичні симуляції</p>
+    </footer>
+
+    <!-- Simulation Physics Engine JavaScript -->
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Simulation parameters
+        let particles = [];
+        let numParticles = 60;
+        let temperature = 300; // in Kelvin
+        let particleMass = 1;  // Mass multiplier
+        let currentState = 'gas'; // 'gas', 'liquid', 'solid'
+        let showVectors = false;
+        let showTrails = false;
+        let isPaused = false;
+        
+        // Base physics constants
+        const k_B = 1.0; // Normalized Boltzmann constant
+        const baseRadius = 7;
+
+        // Interactive Canvas sizing
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Class representing a single molecule / particle
+        class Particle {
+            constructor(x, y, vx, vy) {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.radius = baseRadius;
+                this.originX = x; // used for solid vibration anchoring
+                this.originY = y;
+                this.history = [];
+            }
+
+            get speed() {
+                return Math.hypot(this.vx, this.vy);
+            }
+
+            get kineticEnergy() {
+                return 0.5 * particleMass * (this.vx * this.vx + this.vy * this.vy);
+            }
+
+            update() {
+                if (isPaused) return;
+
+                if (showTrails) {
+                    this.history.push({ x: this.x, y: this.y });
+                    if (this.history.length > 8) this.history.shift();
+                } else {
+                    this.history = [];
+                }
+
+                if (currentState === 'solid') {
+                    // Lattice harmonic vibration spring force back to lattice site
+                    const k = 0.05 * (temperature / 300);
+                    const damping = 0.92;
+                    const fx = -k * (this.x - this.originX);
+                    const fy = -k * (this.y - this.originY);
+
+                    // Add random thermal kick
+                    const kick = Math.sqrt(temperature) * 0.08;
+                    this.vx += fx + (Math.random() - 0.5) * kick;
+                    this.vy += fy + (Math.random() - 0.5) * kick;
+
+                    this.vx *= damping;
+                    this.vy *= damping;
+                } else if (currentState === 'liquid') {
+                    // Cohesive forces + free motion in bottom region
+                    const gravity = 0.08;
+                    this.vy += gravity;
+                    this.vx *= 0.995;
+                    this.vy *= 0.995;
+                }
+
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Wall collisions
+                const pad = this.radius;
+                if (this.x - pad < 0) {
+                    this.x = pad;
+                    this.vx = -this.vx;
+                }
+                if (this.x + pad > canvas.width) {
+                    this.x = canvas.width - pad;
+                    this.vx = -this.vx;
+                }
+                if (this.y - pad < 0) {
+                    this.y = pad;
+                    this.vy = -this.vy;
+                }
+                if (this.y + pad > canvas.height) {
+                    this.y = canvas.height - pad;
+                    this.vy = -this.vy;
+                }
+            }
+
+            draw() {
+                // Draw trail if enabled
+                if (showTrails && this.history.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.history[0].x, this.history[0].y);
+                    for (let p of this.history) ctx.lineTo(p.x, p.y);
+                    ctx.strokeStyle = `rgba(255, 255, 255, 0.15)`;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // Determine particle color based on relative speed (Cold = Blue, Medium = Yellow, Hot = Red)
+                const targetSpeed = Math.sqrt((3 * k_B * temperature) / particleMass);
+                const ratio = this.speed / (targetSpeed * 1.5 || 1);
+                
+                // Color interpolation: blue (220) to red (0)
+                let hue = Math.max(0, Math.min(240, 220 - ratio * 200));
+                ctx.fillStyle = `hsl(${hue}, 90%, 55%)`;
+                ctx.shadowColor = `hsl(${hue}, 90%, 50%)`;
+                ctx.shadowBlur = 8;
+
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0; // reset shadow
+
+                // Draw velocity vector arrows if option toggled
+                if (showVectors) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(this.x + this.vx * 4, this.y + this.vy * 4);
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // Initialize particles based on selected state & temp
+        function initParticles() {
+            particles = [];
+            const cols = 10;
+            const rows = Math.ceil(numParticles / cols);
+            const spacingX = canvas.width / (cols + 1);
+            const spacingY = canvas.height / (rows + 1);
+
+            for (let i = 0; i < numParticles; i++) {
+                let x, y;
+                if (currentState === 'solid') {
+                    // Grid arrangement for crystal lattice
+                    const r = Math.floor(i / cols);
+                    const c = i % cols;
+                    x = canvas.width / 2 - (cols * 25) / 2 + c * 25;
+                    y = canvas.height / 2 - (rows * 25) / 2 + r * 25;
+                } else if (currentState === 'liquid') {
+                    x = Math.random() * (canvas.width - 40) + 20;
+                    y = canvas.height - Math.random() * (canvas.height * 0.4) - 20;
+                } else { // gas
+                    x = Math.random() * (canvas.width - 40) + 20;
+                    y = Math.random() * (canvas.height - 40) + 20;
+                }
+
+                // Speed proportional to sqrt(T / m) Maxwell-Boltzmann characteristic
+                const vScale = Math.sqrt((temperature) / particleMass) * 0.25;
+                const angle = Math.random() * Math.PI * 2;
+                const vx = Math.cos(angle) * vScale;
+                const vy = Math.sin(angle) * vScale;
+
+                particles.push(new Particle(x, y, vx, vy));
+            }
+        }
+
+        // Handle elastic collisions between particles
+        function handleCollisions() {
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const p1 = particles[i];
+                    const p2 = particles[j];
+
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const dist = Math.hypot(dx, dy);
+                    const minDist = p1.radius + p2.radius;
+
+                    if (dist < minDist) {
+                        // Overlap resolution
+                        const overlap = minDist - dist;
+                        const nx = dx / (dist || 1);
+                        const ny = dy / (dist || 1);
+
+                        p1.x -= nx * overlap * 0.5;
+                        p1.y -= ny * overlap * 0.5;
+                        p2.x += nx * overlap * 0.5;
+                        p2.y += ny * overlap * 0.5;
+
+                        // Elastic collision velocity swap (equal masses)
+                        const kx = p1.vx - p2.vx;
+                        const ky = p1.vy - p2.vy;
+                        const p = 2 * (nx * kx + ny * ky) / 2;
+
+                        p1.vx -= p * nx;
+                        p1.vy -= p * ny;
+                        p2.vx += p * nx;
+                        p2.vy += p * ny;
+                    }
+                }
+            }
+        }
+
+        // Adjust temperature and rescale velocities accordingly
+        function setTemperature(newT) {
+            const oldT = temperature;
+            temperature = Math.max(20, Math.min(800, newT));
+            
+            // Update UI elements
+            document.getElementById('tempSlider').value = temperature;
+            document.getElementById('kelvinDisplay').innerText = Math.round(temperature);
+            document.getElementById('celsiusDisplay').innerText = Math.round(temperature - 273.15);
+
+            // Update mercury column height (50K = 5%, 800K = 100%)
+            const mercuryPercent = Math.max(5, Math.min(100, ((temperature - 50) / 750) * 100));
+            document.getElementById('thermoMercury').style.height = mercuryPercent + '%';
+
+            // Scale particle speeds to reflect new thermal energy
+            if (oldT > 0 && currentState !== 'solid') {
+                const scale = Math.sqrt(temperature / oldT);
+                particles.forEach(p => {
+                    p.vx *= scale;
+                    p.vy *= scale;
+                });
+            }
+        }
+
+        function updateTemperatureFromSlider(val) {
+            setTemperature(parseFloat(val));
+        }
+
+        function adjustTemp(delta) {
+            setTemperature(temperature + delta);
+        }
+
+        function setParticleMass(m) {
+            particleMass = m;
+            document.getElementById('btnMassLight').className = m === 1 
+                ? "px-2.5 py-1 rounded bg-indigo-600 text-white font-bold transition"
+                : "px-2.5 py-1 rounded bg-slate-800 text-slate-400 hover:text-white font-bold transition";
+            document.getElementById('btnMassHeavy').className = m === 4 
+                ? "px-2.5 py-1 rounded bg-indigo-600 text-white font-bold transition"
+                : "px-2.5 py-1 rounded bg-slate-800 text-slate-400 hover:text-white font-bold transition";
+            
+            // Rescale speeds for new mass (v ~ 1/sqrt(m))
+            setTemperature(temperature);
+        }
+
+        function changeState(state) {
+            currentState = state;
+            const buttons = {
+                gas: document.getElementById('btnStateGas'),
+                liquid: document.getElementById('btnStateLiquid'),
+                solid: document.getElementById('btnStateSolid')
+            };
+
+            Object.keys(buttons).forEach(k => {
+                if (k === state) {
+                    buttons[k].className = "px-3 py-1 rounded-md text-xs font-semibold bg-indigo-600 text-white shadow transition-all";
+                } else {
+                    buttons[k].className = "px-3 py-1 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all";
+                }
+            });
+
+            initParticles();
+        }
+
+        function toggleVectors(val) { showVectors = val; }
+        function toggleTrails(val) { showTrails = val; }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            document.getElementById('pauseIcon').className = isPaused ? "fa-solid fa-play" : "fa-solid fa-pause";
+            document.getElementById('pauseText').innerText = isPaused ? "Відновити" : "Пауза";
+        }
+
+        function resetSim() {
+            setTemperature(300);
+            initParticles();
+        }
+
+        // Update statistics and speed histogram
+        function updateStats() {
+            let totalEk = 0;
+            let totalSpeed = 0;
+            const speedBins = new Array(8).fill(0);
+
+            particles.forEach(p => {
+                const s = p.speed;
+                totalSpeed += s;
+                totalEk += p.kineticEnergy;
+
+                // Bin speed into histogram
+                const binIndex = Math.min(7, Math.floor(s / 1.5));
+                speedBins[binIndex]++;
+            });
+
+            const avgEk = particles.length ? (totalEk / particles.length) : 0;
+            const avgSpeed = particles.length ? (totalSpeed / particles.length) : 0;
+
+            document.getElementById('avgEkDisplay').innerHTML = `${(avgEk * 10).toFixed(1)} <span class="text-xs text-slate-300">умов. од.</span>`;
+            document.getElementById('avgSpeedDisplay').innerText = Math.round(avgSpeed * 100);
+
+            // Render Maxwell speed histogram
+            const histContainer = document.getElementById('histogramContainer');
+            histContainer.innerHTML = '';
+            const maxCount = Math.max(...speedBins, 1);
+
+            speedBins.forEach((count, i) => {
+                const barHeight = (count / maxCount) * 100;
+                const bar = document.createElement('div');
+                bar.className = 'flex-1 bg-gradient-to-t from-indigo-600 to-cyan-400 rounded-t transition-all duration-150 relative group';
+                bar.style.height = `${Math.max(8, barHeight)}%`;
+                
+                // Tooltip
+                const tooltip = document.createElement('div');
+                tooltip.className = 'absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] py-0.5 px-1.5 rounded opacity-0 group-hover:opacity-100 transition pointer-events-none z-20';
+                tooltip.innerText = `${count} мол.`;
+                bar.appendChild(tooltip);
+
+                histContainer.appendChild(bar);
+            });
+        }
+
+        // Main animation loop
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw container border glow
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+            if (!isPaused) {
+                handleCollisions();
+            }
+
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            updateStats();
+            requestAnimationFrame(animate);
+        }
+
+        // Interactive quiz check function
+        function checkAnswer(button, isCorrect) {
+            const parentDiv = button.parentElement;
+            const buttons = parentDiv.querySelectorAll('button');
+            
+            buttons.forEach(btn => {
+                btn.disabled = true;
+                btn.className = "p-2 rounded-lg bg-slate-900 text-slate-500 text-left border border-slate-800 opacity-60";
+            });
+
+            if (isCorrect) {
+                button.className = "p-2 rounded-lg bg-emerald-600/30 text-emerald-300 font-medium text-left border border-emerald-500/50 shadow-sm";
+                button.innerHTML += ' <i class="fa-solid fa-circle-check float-right text-emerald-400 text-base"></i>';
+            } else {
+                button.className = "p-2 rounded-lg bg-rose-600/30 text-rose-300 font-medium text-left border border-rose-500/50 shadow-sm";
+                button.innerHTML += ' <i class="fa-solid fa-circle-xmark float-right text-rose-400 text-base"></i>';
+            }
+        }
+
+        // Initial launch
+        window.onload = function() {
+            resizeCanvas();
+            initParticles();
+            setTemperature(300);
+            animate();
+        };
+    </script>
+</body>
+</html>
